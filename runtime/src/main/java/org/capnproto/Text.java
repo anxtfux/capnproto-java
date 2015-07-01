@@ -22,6 +22,7 @@
 package org.capnproto;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 
 public final class Text {
     public static final class Factory implements
@@ -63,6 +64,8 @@ public final class Text {
     }
     public static final Factory factory = new Factory();
 
+    private static final Charset UTF8 = Charset.forName("UTF-8");
+
     public static final class Reader {
         public final ByteBuffer buffer;
         public final int offset; // in bytes
@@ -82,14 +85,9 @@ public final class Text {
         }
 
         public Reader(String value) {
-            try {
-                byte[] bytes = value.getBytes("UTF-8");
-                this.buffer = ByteBuffer.wrap(bytes);
-                this.offset = 0;
-                this.size = bytes.length;
-            } catch (java.io.UnsupportedEncodingException e) {
-                throw new Error("UTF-8 is unsupported");
-            }
+            this.buffer = UTF8.encode(value);
+            this.offset = 0;
+            this.size = buffer.limit();
         }
 
         public final int size() {
@@ -99,26 +97,14 @@ public final class Text {
         public ByteBuffer asByteBuffer() {
             ByteBuffer dup = this.buffer.asReadOnlyBuffer();
             dup.position(this.offset);
-            ByteBuffer result = dup.slice();
-            result.limit(this.size);
-            return result;
+            dup.limit(this.offset + this.size);
+            return dup.slice();
         }
 
         @Override
         public final String toString() {
-            byte[] bytes = new byte[this.size];
-
-            ByteBuffer dup = this.buffer.duplicate();
-            dup.position(this.offset);
-            dup.get(bytes, 0, this.size);
-
-            try {
-                return new String(bytes, "UTF-8");
-            } catch (java.io.UnsupportedEncodingException e) {
-                throw new Error("UTF-8 is unsupported");
-            }
+            return UTF8.decode(asByteBuffer()).toString();
         }
-
     }
 
     public static final class Builder {
@@ -139,26 +125,15 @@ public final class Text {
         }
 
         public ByteBuffer asByteBuffer() {
-            ByteBuffer dup = this.buffer.duplicate();
+            ByteBuffer dup = this.buffer.asReadOnlyBuffer();
             dup.position(this.offset);
-            ByteBuffer result = dup.slice();
-            result.limit(this.size);
-            return result;
+            dup.limit(this.offset + this.size);
+            return dup.slice();
         }
 
         @Override
         public final String toString() {
-            byte[] bytes = new byte[this.size];
-
-            ByteBuffer dup = this.buffer.duplicate();
-            dup.position(this.offset);
-            dup.get(bytes, 0, this.size);
-
-            try {
-                return new String(bytes, "UTF-8");
-            } catch (java.io.UnsupportedEncodingException e) {
-                throw new Error("UTF-8 is unsupported");
-            }
+            return UTF8.decode(asByteBuffer()).toString();
         }
 
     }
