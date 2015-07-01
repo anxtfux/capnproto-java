@@ -89,16 +89,13 @@ public final class Data {
         public ByteBuffer asByteBuffer() {
             ByteBuffer dup = this.buffer.asReadOnlyBuffer();
             dup.position(this.offset);
-            ByteBuffer result = dup.slice();
-            result.limit(this.size);
-            return result;
+            dup.limit(this.offset + this.size);
+            return dup.slice();
         }
 
         public byte[] toArray() {
-            ByteBuffer dup = this.buffer.duplicate();
             byte result[] = new byte[this.size];
-            dup.position(this.offset);
-            dup.get(result, 0, this.size);
+            System.arraycopy(buffer.array(), this.offset, result, 0, this.size);
             return result;
         }
     }
@@ -121,18 +118,15 @@ public final class Data {
         }
 
         public ByteBuffer asByteBuffer() {
-            ByteBuffer dup = this.buffer.duplicate();
+            ByteBuffer dup = this.buffer.asReadOnlyBuffer();
             dup.position(this.offset);
-            ByteBuffer result = dup.slice();
-            result.limit(this.size);
-            return result;
+            dup.limit(this.offset + this.size);
+            return dup.slice();
         }
 
         public byte[] toArray() {
-            ByteBuffer dup = this.buffer.duplicate();
             byte result[] = new byte[this.size];
-            dup.position(this.offset);
-            dup.get(result, 0, this.size);
+            System.arraycopy(buffer.array(), this.offset, result, 0, this.size);
             return result;
         }
     }
