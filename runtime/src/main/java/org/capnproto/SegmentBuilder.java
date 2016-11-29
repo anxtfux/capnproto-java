@@ -24,25 +24,20 @@ package org.capnproto;
 import java.nio.ByteBuffer;
 
 public final class SegmentBuilder extends SegmentReader {
+    static final int FAILED_ALLOCATION = -1;
+    private final int capacity; // in words
+    public final int id;
+    private int pos = 0; // in words
 
-    public static final int FAILED_ALLOCATION = -1;
-
-    public int pos = 0; // in words
-    public int id = 0;
-
-    public SegmentBuilder(ByteBuffer buf, Arena arena) {
+    public SegmentBuilder(ByteBuffer buf, BuilderArena arena, int id) {
         super(buf, arena);
-    }
-
-    // the total number of words the buffer can hold
-    private final int capacity() {
-        this.buffer.rewind();
-        return this.buffer.remaining() / 8;
+        capacity = buf.capacity() >>> 3;
+        this.id = id;
     }
 
     // return how many words have already been allocated
     public final int currentSize() {
-        return this.pos;
+        return pos;
     }
 
     /*
@@ -50,26 +45,22 @@ public final class SegmentBuilder extends SegmentReader {
      */
     public final int allocate(int amount) {
         assert amount >= 0 : "tried to allocate a negative number of words";
-
-        if (amount > this.capacity() - this.currentSize()) {
-            return FAILED_ALLOCATION; // no space left;
-        } else {
-            int result = this.pos;
-            this.pos += amount;
-            return result;
-        }
+        if (amount > capacity - pos)
+            return FAILED_ALLOCATION;
+        int result = pos;
+        pos += amount;
+        return result;
     }
 
     public final BuilderArena getArena() {
         return (BuilderArena)this.arena;
     }
 
-    public final boolean isWritable() {
-        // TODO support external non-writable segments
+    final boolean isWritable() {
         return true;
     }
 
     public final void put(int index, long value) {
-        buffer.putLong(index * Constants.BYTES_PER_WORD, value);
+        buffer.putLong(index << 3, value);
     }
 }
