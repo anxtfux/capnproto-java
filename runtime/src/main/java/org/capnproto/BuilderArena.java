@@ -22,100 +22,94 @@
 package org.capnproto;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.ArrayList;
+import java.util.LinkedList;
 
 public final class BuilderArena implements Arena {
+    private final LinkedList<SegmentBuilder> segments = new LinkedList<>();
+    private final Allocator allocator;
 
-    public enum AllocationStrategy {
-        FIXED_SIZE,
-        GROW_HEURISTICALLY
+    public BuilderArena() {
+        this(1024);
     }
 
-    public static final int SUGGESTED_FIRST_SEGMENT_WORDS = 1024;
-    public static final AllocationStrategy SUGGESTED_ALLOCATION_STRATEGY =
-        AllocationStrategy.GROW_HEURISTICALLY;
+    public BuilderArena(int firstSegmentSizeWords) {
+        this(firstSegmentSizeWords, false);
+    }
 
-    public final ArrayList<SegmentBuilder> segments;
+    public BuilderArena(int firstSegmentSizeWords, boolean grow) {
+        this(grow ? Allocator.growHeuristically(firstSegmentSizeWords) : Allocator.fixedSize(firstSegmentSizeWords));
+    }
 
-    public int nextSize;
-    public final AllocationStrategy allocationStrategy;
+    public BuilderArena(Allocator allocator) {
+        this.allocator = allocator;
+    }
 
-
-    public BuilderArena(int firstSegmentSizeWords, AllocationStrategy allocationStrategy) {
-        this.segments = new ArrayList<SegmentBuilder>();
-        this.nextSize = firstSegmentSizeWords;
-        this.allocationStrategy = allocationStrategy;
-        SegmentBuilder segment0 = new SegmentBuilder(
-            ByteBuffer.allocate(firstSegmentSizeWords * Constants.BYTES_PER_WORD), this);
-        segment0.buffer.order(ByteOrder.LITTLE_ENDIAN);
-        this.segments.add(segment0);
+    public int getSegmentCount() {
+        return segments.size();
     }
 
     public final SegmentReader tryGetSegment(int id) {
-        return this.segments.get(id);
+        return getSegment(id);
     }
+
     public final SegmentBuilder getSegment(int id) {
-        return this.segments.get(id);
+        return id == 0 ? segments.getFirst() : segments.get(id);
     }
 
     public final void checkReadLimit(int numBytes) { }
 
-    public static class AllocateResult {
+    static final class AllocateResult {
         public final SegmentBuilder segment;
 
         // offset to the beginning the of allocated memory
         public final int offset;
 
-        public AllocateResult(SegmentBuilder segment, int offset) {
+        private AllocateResult(SegmentBuilder segment, int offset) {
             this.segment = segment;
             this.offset = offset;
         }
     }
 
     public AllocateResult allocate(int amount) {
-
-        int len = this.segments.size();
-        // we allocate the first segment in the constructor.
-
-        int result = this.segments.get(len - 1).allocate(amount);
-        if (result != SegmentBuilder.FAILED_ALLOCATION) {
-            return new AllocateResult(this.segments.get(len - 1), result);
+        SegmentBuilder segment;
+        int result;
+        if (segments.size() == 0 || (result = (segment = segments.getLast()).allocate(amount)) == SegmentBuilder.FAILED_ALLOCATION) {
+            segment = new SegmentBuilder(allocator.allocate(segments.size(), amount), this, segments.size());
+            segments.add(segment);
+            return new AllocateResult(segment, segment.allocate(amount));
         }
+        return new AllocateResult(segment, result);
+    }
 
-        // allocate_owned_memory
-
-        int size = Math.max(amount, this.nextSize);
-        SegmentBuilder newSegment = new SegmentBuilder(
-            ByteBuffer.allocate(size * Constants.BYTES_PER_WORD),
-            this);
-
-        switch (this.allocationStrategy) {
-        case GROW_HEURISTICALLY:
-            this.nextSize += size;
-            break;
-        default:
-            break;
+    public final ByteBuffer[] getSegmentsAndHeaderForOutput() {
+        ByteBuffer[] result = new ByteBuffer[segments.size() + 1];
+        ByteBuffer header = allocator.allocate(-1, (segments.size() + 2) / 2);
+        // set number of segments -1
+        header.putInt(segments.size() - 1);
+        result[0] = header;
+        int pos = 1;
+        for (SegmentBuilder segment : segments) {
+            ByteBuffer b = segment.buffer.duplicate(); // the byte order does not matter when writing byte wise
+            header.putInt(segment.currentSize());
+            b.position(0); // needed due to unnecessary double buffering in Text and Data
+            b.limit(segment.currentSize() << 3);
+            result[pos++] = b;
         }
-
-        // --------
-
-        newSegment.buffer.order(ByteOrder.LITTLE_ENDIAN);
-        newSegment.id = len;
-        this.segments.add(newSegment);
-
-        return new AllocateResult(newSegment, newSegment.allocate(amount));
+        // ensure 8 byte alignment
+        if (segments.size() % 2 == 0)
+            header.putInt(0);
+        header.flip();
+        return result;
     }
 
     public final ByteBuffer[] getSegmentsForOutput() {
-        ByteBuffer[] result = new ByteBuffer[this.segments.size()];
-        for (int ii = 0; ii < this.segments.size(); ++ii) {
-            SegmentBuilder segment = segments.get(ii);
-            segment.buffer.rewind();
-            ByteBuffer slice = segment.buffer.slice();
-            slice.limit(segment.currentSize() * Constants.BYTES_PER_WORD);
-            slice.order(ByteOrder.LITTLE_ENDIAN);
-            result[ii] = slice;
+        ByteBuffer[] result = new ByteBuffer[segments.size()];
+        int pos = 0;
+        for (SegmentBuilder segment : segments) {
+            ByteBuffer b = segment.buffer.duplicate(); // the byte order does not matter when writing byte wise
+            b.position(0); // needed due to unnecessary double buffering in Text and Data
+            b.limit(segment.currentSize() << 3);
+            result[pos++] = b;
         }
         return result;
     }

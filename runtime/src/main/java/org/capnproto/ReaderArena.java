@@ -21,22 +21,18 @@
 
 package org.capnproto;
 
-import java.util.ArrayList;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 public final class ReaderArena implements Arena {
-
-    public long limit;
-    // current limit
-
-    public final ArrayList<SegmentReader> segments;
+    private final ArrayList<SegmentReader> segments;
+    private long limit;
 
     public ReaderArena(ByteBuffer[] segmentSlices, long traversalLimitInWords) {
-        this.limit = traversalLimitInWords;
-        this.segments = new ArrayList<SegmentReader>();
-        for(int ii = 0; ii < segmentSlices.length; ++ii) {
-            this.segments.add(new SegmentReader(segmentSlices[ii], this));
-        }
+        limit = traversalLimitInWords;
+        segments = new ArrayList<>(segmentSlices.length);
+        for (ByteBuffer b : segmentSlices)
+            segments.add(new SegmentReader(b, this));
     }
 
     public SegmentReader tryGetSegment(int id) {
@@ -44,10 +40,8 @@ public final class ReaderArena implements Arena {
     }
 
     public final void checkReadLimit(int numBytes) {
-        if (numBytes > limit) {
+        if (numBytes > limit)
             throw new DecodeException("Read limit exceeded.");
-        } else {
-            limit -= numBytes;
-        }
+        limit -= numBytes;
     }
 }
