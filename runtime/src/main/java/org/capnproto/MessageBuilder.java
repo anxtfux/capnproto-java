@@ -21,54 +21,31 @@
 
 package org.capnproto;
 
-public final class MessageBuilder {
+import java.nio.ByteBuffer;
 
+public final class MessageBuilder {
     private final BuilderArena arena;
 
     public MessageBuilder() {
-        this.arena = new BuilderArena(BuilderArena.SUGGESTED_FIRST_SEGMENT_WORDS,
-                                      BuilderArena.SUGGESTED_ALLOCATION_STRATEGY);
+        this.arena = new BuilderArena();
     }
 
     public MessageBuilder(int firstSegmentWords) {
-        this.arena = new BuilderArena(firstSegmentWords,
-                                      BuilderArena.SUGGESTED_ALLOCATION_STRATEGY);
+        this.arena = new BuilderArena(firstSegmentWords);
     }
 
-    public MessageBuilder(int firstSegmentWords, BuilderArena.AllocationStrategy allocationStrategy) {
-        this.arena = new BuilderArena(firstSegmentWords,
-                                      allocationStrategy);
-    }
-
-    private AnyPointer.Builder getRootInternal() {
-        SegmentBuilder rootSegment = this.arena.segments.get(0);
-        if (rootSegment.currentSize() == 0) {
-            int location = rootSegment.allocate(1);
-            if (location == SegmentBuilder.FAILED_ALLOCATION) {
-                throw new Error("could not allocate root pointer");
-            }
-            if (location != 0) {
-                throw new Error("First allocated word of new segment was not at offset 0");
-            }
-            return new AnyPointer.Builder(rootSegment, location);
-        } else {
-            return new AnyPointer.Builder(rootSegment, 0);
-        }
-    }
-
-    public <T> T getRoot(FromPointerBuilder<T> factory) {
-        return this.getRootInternal().getAs(factory);
-    }
-
-    public <T, U> void setRoot(SetPointerBuilder<T, U> factory, U reader) {
-        this.getRootInternal().setAs(factory, reader);
+    public MessageBuilder(int firstSegmentWords, boolean grow) {
+        this.arena = new BuilderArena(firstSegmentWords, grow);
     }
 
     public <T> T initRoot(FromPointerBuilder<T> factory) {
-        return this.getRootInternal().initAs(factory);
+        if (arena.getSegmentCount() > 0)
+            throw new RuntimeException("Root pointer already initialized");
+        arena.allocate(1);
+        return new AnyPointer.Builder(arena.getSegment(0), 0).initAs(factory);
     }
 
-    public final java.nio.ByteBuffer[] getSegmentsForOutput() {
+    public final ByteBuffer[] getSegmentsForOutput() {
         return this.arena.getSegmentsForOutput();
     }
 }
