@@ -841,11 +841,9 @@ final class WireHelpers {
                                        SegmentBuilder segment,
                                        Data.Reader value) {
         Data.Builder builder = initDataPointer(refOffset, segment, value.size);
-
-        // TODO is there a way to do this with bulk methods?
-        for (int i = 0; i < builder.size; ++i) {
-            builder.buffer.put(builder.offset + i, value.buffer.get(value.offset + i));
-        }
+        // copy the data into current segment
+        // use this only for small data fields
+        builder.asByteBuffer().put(value.asByteBuffer());
         return builder;
     }
 
@@ -861,10 +859,11 @@ final class WireHelpers {
                 return new Data.Builder();
             } else {
                 Data.Builder builder = initDataPointer(refOffset, segment, defaultSize);
-                // TODO is there a way to do this with bulk methods?
-                for (int i = 0; i < builder.size; ++i) {
-                    builder.buffer.put(builder.offset + i, defaultBuffer.get(defaultOffset * 8 + i));
-                }
+                // copy the data into current segment
+                // use this only for small data fields
+                defaultBuffer.position(defaultOffset << 3);
+                defaultBuffer.limit(defaultBuffer.position() + defaultSize << 3);
+                builder.asByteBuffer().put(defaultBuffer);
                 return builder;
             }
         }
